@@ -23,6 +23,8 @@ def main(queries):
             lora_weights_path=domain_config["lora_weights_path"],
             domain_description=domain_config["domain_description"]
         )
+
+    answers = []
     
     for i, query in enumerate(queries, 1):
         result = router.process_query(
@@ -41,21 +43,25 @@ def main(queries):
         print(f'Preview: {result['background_info'][:_PREVIEW_LEN]}{'...' if len(result['background_info']) >= _PREVIEW_LEN else ''}')
         print('[Factuality]: checking if expanded query is valid')
         
-        is_valid = checker.factuality(result['enhanced_query'])
+        is_valid = checker.factuality_check(result['enhanced_query'])
         print(f'The Expanded Query is: {is_valid}')
 
         new_query = result['enhanced_query'] if is_valid else query
         answer: str = chat(new_query)
+
+        print(f'[Answer]\n{answer[:2*_PREVIEW_LEN]}{'...' if len(answer) >= 2*_PREVIEW_LEN else ''}', end='\n\n')
+
+        answers.append(answer)
         
-        return answer
+    return answers
         
 if __name__ == "__main__":
     queries = [
         "What are the symptoms of COVID-19?",  # 医疗领域
-        # "How to invest in the stock market?",  # 金融领域
-        # "What is a patent?",  # 法律领域
-        # "Explain neural networks",  # 技术领域
-        # "Best recipe for chocolate cake"  # 不属于任何领域 -> Web搜索
+        "How to invest in the stock market?",  # 金融领域
+        "What is a patent?",  # 法律领域
+        "Explain neural networks",  # 技术领域
+        "Best recipe for chocolate cake"  # 不属于任何领域 -> Web搜索
     ]
 
-    main(queries)
+    answers = main(queries)
