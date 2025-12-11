@@ -14,6 +14,7 @@ import openai
 import atexit
 
 
+
 class SmartQueryRouter:
     """
     智能查询路由器：根据query的embedding选择最合适的领域专家SLM
@@ -23,7 +24,8 @@ class SmartQueryRouter:
         self,
         embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
         similarity_threshold: float = 0.6,
-        device: str | None = None
+        device: str | None = None,
+        is_llm_involved=True
     ):
         """
         初始化路由器
@@ -46,6 +48,7 @@ class SmartQueryRouter:
         self.slm_configs = {}
         self.slm_embeddings = {}
         self.loaded_models = {}
+        self.is_llm_involved = is_llm_involved
         
         # 相似度阈值
         self.similarity_threshold = similarity_threshold
@@ -517,46 +520,49 @@ Background Information:"""
         
         # 选择最佳SLM
         selected_domain, similarity, all_similarities = self.select_best_slm_v2(query)
+        method = None
+        result = {}
 
-        # 生成背景信息
-        if selected_domain is not None:
-            # 使用选中的SLM生成背景信息
-            background_info = self.generate_background_info(
-                selected_domain,
-                query,
-                max_background_length
-            )
-            method = "domain_slm"
-        else:
-            # 使用Web搜索
-            background_info = self.web_search_fallback(
-                query,
-                max_length=max_background_length
-            )
-            method = "web_search"
-        
-        # 组合增强后的query
-        enhanced_query = f"""Original Query: {query}
+        if self.is_llm_involved:
+            # 生成背景信息
+            if selected_domain is not None:
+                # 使用选中的SLM生成背景信息
+                background_info = self.generate_background_info(
+                    selected_domain,
+                    query,
+                    max_background_length
+                )
+                method = "domain_slm"
+            else:
+                # 使用Web搜索
+                background_info = self.web_search_fallback(
+                    query,
+                    max_length=max_background_length
+                )
+                method = "web_search"
 
-Background Information:
-{background_info}
+            # 组合增强后的query
+            enhanced_query = f"""Original Query: {query}
 
-Please answer the original query considering the background information provided above."""
-        
-        # 返回结果
-        result = {
-            "original_query": query,
-            "selected_domain": selected_domain,
-            "similarity_score": similarity,
-            "all_similarities": all_similarities,
-            "method_used": method,
-            "background_info": background_info,
-            "enhanced_query": enhanced_query
-        }
-        
+    Background Information:
+    {background_info}
+
+    Please answer the original query considering the background information provided above."""
+
+            # 返回结果
+            result = {
+                "original_query": query,
+                "selected_domain": selected_domain,
+                "similarity_score": similarity,
+                "all_similarities": all_similarities,
+                "method_used": method,
+                "background_info": background_info,
+                "enhanced_query": enhanced_query
+            }
+
         print("\n" + "="*80)
         print("Processing Complete!")
-        print(f"Method: {method}")
+        print(f"Method: {'no llm' if not self.is_llm_involved else method}")
         if selected_domain:
             print(f"Domain: {selected_domain}")
         print("="*80 + "\n")
@@ -568,9 +574,30 @@ Please answer the original query considering the background information provided
         卸载指定的SLM以释放内存
         """
         if domain_name in self.loaded_models:
+            self.unload_model(self.loaded_models[domain_name])
             del self.loaded_models[domain_name]
-            torch.cuda.empty_cache()
             print(f"SLM for '{domain_name}' unloaded")
+
+    def unload_model(self, loaded_model):
+        """Properly unload model and free memory"""
+        import gc
+        import torch
+
+        model = loaded_model['model']
+
+        # Delete model
+        if model is not None:
+            try:
+                model.cpu()
+            except:
+                pass
+
+        # Clear cache and collect garbage
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+
+        gc.collect()
     
     def unload_all_slms(self):
         """
@@ -663,7 +690,7 @@ def main():
         "Explain the difference between supervised and unsupervised learning in machine learning",
         "How to clean toilet?"  # 不属于任何领域，应该使用Web搜索
     ]
-    
+
     for query in test_queries:
         result = router.process_query(query)
         

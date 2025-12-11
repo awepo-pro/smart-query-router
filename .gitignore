@@ -80,3 +80,6 @@ outputs/
 tmp/
 temp/
 output/
+
+models*
+result/

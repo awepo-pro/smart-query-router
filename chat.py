@@ -42,7 +42,7 @@ Remember: Be helpful while staying within these boundaries. If you're unsure abo
 
 def chat(query: str):
     model_name = 'qwen-plus'
-    max_length = 100
+    max_length = None
 
     # Configure API credentials
     api_key = os.getenv('QIANWEN_API_KEY', None) or os.getenv("DASHSCOPE_API_KEY", "xxx")
